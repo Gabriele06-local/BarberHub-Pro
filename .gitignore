@@ -30,12 +30,31 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env — mai chiavi reali su GitHub (vedi .env.example)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+!.env.example
 
 # vercel
 .vercel
 
+# ide / os
+.idea/
+.vscode/*
+!.vscode/extensions.json
+Thumbs.db
+Desktop.ini
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# tool caches
+.turbo
+.swc
+
+# export design / mockup (non parte dell’app Next)
+/stitch_barberhub_pro_saas_dashboard/
