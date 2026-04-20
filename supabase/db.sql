@@ -1,14 +1,48 @@
--- BarberHub Pro — UNICO script SQL (schema + dati di allineamento + RLS + RPC + trigger)
--- PostgreSQL / Supabase. Non esistono altri file SQL patch nel repo: tutto va qui.
+-- =============================================================================
+-- BarberHub Pro — db.sql (DATABASE COMPLETO, ESEGUIBILE)
+-- =============================================================================
+-- Questo NON è l’export “Schema” di Supabase (ordine tabelle / warning): è lo
+-- script progettato per essere eseguito da zero o per riallineare schema, dati
+-- minimi, funzioni, RLS, RPC e trigger su un progetto Supabase (Postgres 15+).
 --
--- USO:
---   1) SQL Editor → incolla tutto questo file → Run (transazione fino a COMMIT).
---   2) Settings → API → Reload schema cache.
+-- PREREQUISITI (controllo rapido prima di Run):
+--   • Progetto Supabase attivo; SQL Editor incolla l’INTERO file e lo esegue in
+--     un colpo solo (BEGIN … COMMIT: se fallisce una riga, rollback totale).
+--   • Postgres 15+ (indice UNIQUE … NULLS NOT DISTINCT su location_open_slots).
+--   • Schema auth già presente (Supabase standard): public.profiles.id → auth.users.
 --
--- DB già in produzione: esegui solo dopo backup; molte parti sono idempotenti
+-- COSA NON CONTIENE (backup “logico” solo public + trigger auth):
+--   • Utenti Auth esistenti, email, sessioni, Storage — vanno rieseguiti / migrati
+--     a parte se riparti da progetto nuovo.
+--   • Dopo ripristino su progetto vuoto: riconfigura URL Auth, env app, utenti.
+--
+-- POSSIBILE ERRORE SU DB GIÀ POPOLATO: se esistono clienti con stesso
+-- (company_id, location_id, phone), l’ADD CONSTRAINT clients_company_location_phone
+-- fallisce: deduplica i telefoni prima o esegui solo su DB pulito.
+--
+-- CONTENUTO (tutto in un’unica transazione fino a COMMIT):
+--   • Estensione pgcrypto, enum (ruoli, stato appuntamenti, metodo pagamento)
+--   • Tabelle: companies, locations, profiles, clients, appointments, payments,
+--     location_open_slots (ordine DDL valido per le FK)
+--   • Allineamenti dati leggeri (es. sede di default, location_id dove manca)
+--   • Vincoli UNIQUE su clients (telefono per sede) per la prenotazione pubblica
+--   • Funzioni helper RLS (my_company_id, my_role, is_super_admin, …)
+--   • RPC security definer: info azienda, disponibilità, prenotazione, storico
+--   • Row Level Security + policy su tutte le tabelle applicabili
+--   • Trigger su auth.users → public.profiles (bootstrap / inviti)
+--
+-- QUANDO TI SERVE (es. progetto Supabase in pausa dopo 30 gg):
+--   Salva questo file anche fuori dal repo (Drive, USB). Per ricreare il DB:
+--   1) Nuovo progetto Supabase (o DB vuoto compatibile)
+--   2) SQL Editor → incolla tutto db.sql → Run
+--   3) Settings → API → Reload schema cache
+--   4) Riconfigura Auth URL e le env dell’app (NEXT_PUBLIC_SUPABASE_*)
+--
+-- DB GIÀ CON DATI: esegui solo dopo backup; molte parti sono idempotenti
 -- (IF NOT EXISTS, CREATE OR REPLACE, DROP POLICY IF EXISTS).
 --
 -- Ordine DDL: le FK verso public.profiles sono solo dopo la creazione di profiles.
+-- =============================================================================
 
 begin;
 

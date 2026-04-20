@@ -62,7 +62,7 @@ Tutta la logica autorizzativa sensibile resta su **Postgres (RLS + RPC)**; le ch
 | **Prenotazione pubblica** | RPC `rpc_public_*`: disponibilità, info azienda, creazione appuntamento da pagina `/book` (anon o autenticato). |
 | **Profili automatici** | Trigger su `auth.users`: primo utente piattaforma → `SUPER_ADMIN`; successivi → nuova azienda + `ADMIN`; inviti con metadata `role` / `company_id` / `location_id`. |
 
-Funzioni SQL esposte alla app (estratto; dettaglio nel file `supabase/schema.sql`):
+Funzioni SQL esposte alla app (estratto; dettaglio in `supabase/db.sql`):
 
 - `public.my_company_id()`, `public.my_role()`, `public.my_location_id()`, `public.is_super_admin()` — helper per le policy RLS.
 - `public.rpc_public_company_info`, `public.rpc_public_availability`, `public.rpc_public_book_appointment` — flusso prenotazione pubblica.
@@ -102,17 +102,17 @@ Apri [http://localhost:3000](http://localhost:3000). Se mancano le env, la app r
 ### Nuovo progetto (consigliato per allineare tutto)
 
 1. Crea un progetto su [supabase.com](https://supabase.com).
-2. **SQL Editor** → incolla il contenuto di **`supabase/schema.sql`** → esegui l’intero script (termina con `commit;`).
+2. **SQL Editor** → incolla il contenuto di **`supabase/db.sql`** → esegui l’intero script (termina con `commit;`).
 3. **Authentication → URL configuration**: aggiungi l’URL del sito (es. `http://localhost:3000`) se usi redirect email/magic link.
 4. **Settings → API → Reload schema** (cache client).
 
-Il file **`supabase/schema.sql`** è l’unico script SQL del progetto: crea estensioni/tipi, tabelle, allineamenti dati leggeri (sede di default, `location_id` dove manca), funzioni, **RLS**, RPC e il trigger sui nuovi utenti. Anche per DB già avviati si usa lo stesso file (dopo backup se in produzione).
+Il file **`supabase/db.sql`** è l’unico script SQL del progetto (salvalo anche offline se il progetto Supabase va in pausa): crea estensioni/tipi, tabelle, allineamenti dati leggeri (sede di default, `location_id` dove manca), funzioni, **RLS**, RPC e il trigger sui nuovi utenti. Anche per DB già avviati si usa lo stesso file (dopo backup se in produzione).
 
 ---
 
 ## Row Level Security (policy)
 
-Le policy nel repository possono avere **nomi diversi** da etichette create manualmente in dashboard: l’importante è la **logica**. Dopo aver eseguito `schema.sql`, in Supabase vedrai policy coerenti con il file.
+Le policy nel repository possono avere **nomi diversi** da etichette create manualmente in dashboard: l’importante è la **logica**. Dopo aver eseguito `db.sql`, in Supabase vedrai policy coerenti con il file.
 
 | Tabella | Comportamento (sintesi) |
 |---------|-------------------------|
@@ -124,7 +124,7 @@ Le policy nel repository possono avere **nomi diversi** da etichette create manu
 | **payments** | Admin tutta azienda; Manager solo `location_id` della propria sede (nessun accesso diretto barber: allinea al product se serve). |
 | **location_open_slots** | Select/insert/delete: Admin azienda o Manager della sede dello slot. |
 
-Se in dashboard compare ancora una policy unica tipo `clients_all_staff` / `payments_all`, è equivalente a **combinazioni** di più policy nel file attuale: rieseguire `schema.sql` (solo su DB di test o dopo backup) applica i nomi e le regole del repo.
+Se in dashboard compare ancora una policy unica tipo `clients_all_staff` / `payments_all`, è equivalente a **combinazioni** di più policy nel file attuale: rieseguire `db.sql` (solo su DB di test o dopo backup) applica i nomi e le regole del repo.
 
 ---
 
