@@ -68,16 +68,6 @@ BarberHub Pro è un gestionale SaaS pensato per catene di barber shop. Ogni **az
 
 ---
 
-## Screenshot
-
-*(Aggiungi screenshot qui — es. dashboard, calendario, pagina di prenotazione)*
-
-| Dashboard | Calendario | Prenotazione |
-|-----------|-----------|--------------|
-| ![][screenshot-dash] | ![][screenshot-cal] | ![][screenshot-book] |
-
----
-
 ## Guida rapida
 
 ### Prerequisiti
@@ -231,7 +221,4 @@ npm run check
 npm run test:e2e
 ```
 
-<!-- Placeholder per screenshot futuri -->
-[screenshot-dash]: #
-[screenshot-cal]: #
-[screenshot-book]: #
+
