@@ -2,7 +2,7 @@
 
 import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AppSidebar, type NavItem } from "@/components/layout/AppSidebar";
 import type { UserRole } from "@/types/domain";
 
@@ -20,10 +20,14 @@ export function DashboardShell({
   scopeSubtitle?: string | null;
 }) {
   const pathname = usePathname();
+  const prevPathname = useRef(pathname);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
-    setMobileNavOpen(false);
+    if (prevPathname.current !== pathname) {
+      prevPathname.current = pathname;
+      setMobileNavOpen(false);
+    }
   }, [pathname]);
 
   useEffect(() => {

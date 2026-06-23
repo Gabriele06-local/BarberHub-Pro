@@ -141,6 +141,17 @@ export function CalendarAvailabilityPanel({
   const [quickShowName, setQuickShowName] = useState(true);
   const [quickBusy, setQuickBusy] = useState(false);
 
+  const switchDisplayView = useCallback((v: "grid" | "list") => {
+    setDisplayView(v);
+    if (v === "list") setDeleteSlotMode(false);
+  }, []);
+
+  const resetCreateForm = useCallback(() => {
+    setNewApptFormOpen(false);
+    setCreateFormErr(null);
+    setCreateBusy(false);
+  }, []);
+
   const { rangeStart, rangeEnd, visibleDays } = useMemo(
     () => computeVisibleRange(anchorDate, gridLayout),
     [anchorDate, gridLayout],
@@ -219,63 +230,6 @@ export function CalendarAvailabilityPanel({
     setSelected(new Set());
   }, [companyId, locationId, rangeStart, rangeEnd]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    setAnchorDate(weekAnchorDay);
-  }, [weekAnchorDay]);
-
-  useEffect(() => {
-    if (displayView === "list") {
-      setDeleteSlotMode(false);
-    }
-  }, [displayView]);
-
-  useEffect(() => {
-    if (!deleteSlotMode || detail) {
-      return;
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setDeleteSlotMode(false);
-        setErr(null);
-        setMsg(null);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [deleteSlotMode, detail]);
-
-  useEffect(() => {
-    if (!detail) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setDetail(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [detail]);
-
-  useEffect(() => {
-    setNewApptFormOpen(false);
-    setCreateFormErr(null);
-    setCreateBusy(false);
-  }, [detail?.slot.id]);
-
-  useEffect(() => {
-    if (!recModalOpen && !sgModalOpen && !quickOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setRecModalOpen(false);
-        setSgModalOpen(false);
-        setQuickOpen(false);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [recModalOpen, sgModalOpen, quickOpen]);
-
   const slotsByDayMins = useMemo(() => {
     const m = new Map<string, LocationOpenSlotRow[]>();
     for (const r of rows) {
@@ -306,9 +260,15 @@ export function CalendarAvailabilityPanel({
     return m;
   }, [rows, appointments]);
 
+  const closeSlotDetail = useCallback(() => {
+    setDetail(null);
+    resetCreateForm();
+  }, [resetCreateForm]);
+
   const openSlotDetail = useCallback((slot: LocationOpenSlotRow) => {
     setDetail({ slot, appointments: appsBySlotId.get(slot.id) ?? [] });
-  }, [appsBySlotId]);
+    resetCreateForm();
+  }, [appsBySlotId, resetCreateForm]);
 
   const deleteEmptySlotById = useCallback(
     async (slotId: string) => {
@@ -357,10 +317,10 @@ export function CalendarAvailabilityPanel({
         setErr(res.error);
         return;
       }
-      setDetail(null);
+      closeSlotDetail();
       void load();
     },
-    [load],
+    [closeSlotDetail, load],
   );
 
   const openNewAppointmentForm = useCallback(() => {
@@ -405,11 +365,11 @@ export function CalendarAvailabilityPanel({
         setCreateFormErr(res.error);
         return;
       }
-      setDetail(null);
+      closeSlotDetail();
       setMsg("Appuntamento creato.");
       void load();
     },
-    [companyId, createBarberId, createClientId, createService, createWhen, detail, load],
+    [companyId, createBarberId, createClientId, createService, createWhen, detail, load, closeSlotDetail],
   );
 
   /* --- Ricorrente --- */
@@ -588,6 +548,51 @@ export function CalendarAvailabilityPanel({
     void load();
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    const id = setTimeout(() => {
+      if (!cancelled) void load();
+    }, 0);
+    return () => { cancelled = true; clearTimeout(id); };
+  }, [load]);
+
+  useEffect(() => {
+    if (!deleteSlotMode || detail) {
+      return;
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setDeleteSlotMode(false);
+        setErr(null);
+        setMsg(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [deleteSlotMode, detail]);
+
+  useEffect(() => {
+    if (!detail) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeSlotDetail();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [closeSlotDetail, detail]);
+
+  useEffect(() => {
+    if (!recModalOpen && !sgModalOpen && !quickOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setRecModalOpen(false);
+        setSgModalOpen(false);
+        setQuickOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [recModalOpen, sgModalOpen, quickOpen]);
+
   return (
     <>
     <Card className="border-white/10">
@@ -632,21 +637,21 @@ export function CalendarAvailabilityPanel({
             </select>
           ) : null}
           <div className="flex flex-wrap gap-1 rounded-xl border border-white/10 p-0.5">
-            {(
-              [
-                { id: "day" as const, label: "Giorno" },
-                { id: "3days" as const, label: "3 giorni" },
-                { id: "week" as const, label: "Settimana" },
-                { id: "month" as const, label: "Mese" },
-              ] as const
-            ).map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => {
-                  setGridLayout(id);
-                  setDisplayView("grid");
-                }}
+              {(
+                [
+                  { id: "day" as const, label: "Giorno" },
+                  { id: "3days" as const, label: "3 giorni" },
+                  { id: "week" as const, label: "Settimana" },
+                  { id: "month" as const, label: "Mese" },
+                ] as const
+              ).map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => {
+                    setGridLayout(id);
+                    switchDisplayView("grid");
+                  }}
                 className={
                   gridLayout === id
                     ? "rounded-lg bg-red-900/50 px-2.5 py-1.5 text-xs font-semibold text-[#E5E2E1] sm:px-3"
@@ -660,7 +665,7 @@ export function CalendarAvailabilityPanel({
           <div className="flex rounded-xl border border-white/10 p-0.5">
             <button
               type="button"
-              onClick={() => setDisplayView("grid")}
+              onClick={() => switchDisplayView("grid")}
               className={
                 displayView === "grid"
                   ? "rounded-lg bg-red-900/50 px-3 py-1.5 text-xs font-semibold text-[#E5E2E1]"
@@ -671,7 +676,7 @@ export function CalendarAvailabilityPanel({
             </button>
             <button
               type="button"
-              onClick={() => setDisplayView("list")}
+              onClick={() => switchDisplayView("list")}
               className={
                 displayView === "list"
                   ? "rounded-lg bg-red-900/50 px-3 py-1.5 text-xs font-semibold text-[#E5E2E1]"
@@ -692,7 +697,7 @@ export function CalendarAvailabilityPanel({
               setDeleteSlotMode((v) => {
                 const next = !v;
                 if (next) {
-                  setDisplayView("grid");
+                  switchDisplayView("grid");
                 }
                 setErr(null);
                 setMsg(null);
@@ -1346,7 +1351,7 @@ export function CalendarAvailabilityPanel({
         role="dialog"
         aria-modal="true"
         aria-labelledby="slot-detail-title"
-        onClick={() => setDetail(null)}
+                onClick={() => closeSlotDetail()}
       >
         <div
           className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border border-white/10 bg-[#1C1B1B] p-5 shadow-2xl"
@@ -1370,7 +1375,7 @@ export function CalendarAvailabilityPanel({
             </div>
             <button
               type="button"
-              onClick={() => setDetail(null)}
+                      onClick={() => closeSlotDetail()}
               className="rounded-lg px-2 py-1 text-sm text-zinc-400 hover:bg-white/10 hover:text-[#E5E2E1]"
             >
               Chiudi

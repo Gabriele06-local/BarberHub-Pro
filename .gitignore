@@ -12,6 +12,22 @@
 
 # testing
 /coverage
+coverage/
+
+# vitest
+.vitest/
+
+# eslint
+.eslintcache
+
+# playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+e2e/auth/
+
+# sentry
+.sentryclirc
 
 # next.js
 /.next/

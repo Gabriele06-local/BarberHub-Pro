@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 
 const storageKey = (companyId: string) => `bh_book_identity_${companyId}`;
@@ -63,6 +63,8 @@ function statusLabel(s: string): string {
   return s;
 }
 
+const MOUNT_NOW = Date.now();
+
 export function PublicAreaPersonale({
   companyId,
   companyName,
@@ -74,34 +76,19 @@ export function PublicAreaPersonale({
 }) {
   const defaultLocId = locations[0]?.id ?? "";
   const [locationId, setLocationId] = useState(defaultLocId);
-  const [saved, setSaved] = useState<SavedIdentity | null>(null);
-  const [hydrated, setHydrated] = useState(false);
-  const [fullName, setFullName] = useState("");
-  const [contact, setContact] = useState("");
+  const [saved, setSaved] = useState<SavedIdentity | null>(() => readSaved(companyId));
+  const [fullName, setFullName] = useState(() => readSaved(companyId)?.fullName ?? "");
+  const [contact, setContact] = useState(() => readSaved(companyId)?.contact ?? "");
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupErr, setLookupErr] = useState<string | null>(null);
   const [bookings, setBookings] = useState<BookingRow[] | null>(null);
   const [dbClientName, setDbClientName] = useState<string | null>(null);
 
-  useEffect(() => {
-    setLocationId(defaultLocId);
-  }, [defaultLocId]);
-
-  useEffect(() => {
-    const s = readSaved(companyId);
-    setSaved(s);
-    if (s) {
-      setFullName(s.fullName);
-      setContact(s.contact);
-    }
-    setHydrated(true);
-  }, [companyId]);
-
   const { upcoming, history } = useMemo(() => {
     if (!bookings) {
       return { upcoming: [] as BookingRow[], history: [] as BookingRow[] };
     }
-    const nowMs = Date.now();
+    const nowMs = MOUNT_NOW;
     const upcomingList: BookingRow[] = [];
     const historyList: BookingRow[] = [];
     for (const b of bookings) {
@@ -184,14 +171,6 @@ export function PublicAreaPersonale({
     setDbClientName(null);
     setLookupErr(null);
   }, [companyId]);
-
-  if (!hydrated) {
-    return (
-      <div className="rounded-2xl border border-white/10 bg-[#141313] px-5 py-10 text-center text-sm text-zinc-500">
-        Caricamento…
-      </div>
-    );
-  }
 
   return (
     <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#141313] shadow-xl">

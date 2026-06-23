@@ -1,171 +1,237 @@
 # BarberHub Pro
 
-Gestionale multi-tenant per barber shop: **aziende**, **sedi**, **staff** (ruoli), **clienti**, **appuntamenti**, **pagamenti**, **slot pubblici** per prenotazioni dal link `/book/[companyId]`.
+[![CI](https://github.com/Gabriele06-local/BarberHub-Pro/actions/workflows/ci.yml/badge.svg)](https://github.com/Gabriele06-local/BarberHub-Pro/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Stack: **Next.js** (App Router), **Supabase** (Auth, Postgres, RLS), TypeScript.
-
----
-
-## L’applicazione
-
-### Flusso generale
-
-- **`/`** — se Supabase non è configurato → `/setup`; se non sei loggato → `/login`; altrimenti reindirizza a **`/dashboard`** (o `/no-profile` se manca la riga in `public.profiles`).
-- **`/login`** — accesso con Supabase Auth; dopo il login, **`/auth/callback`** completa la sessione.
-- **`/setup`** — pagina guida quando mancano le variabili d’ambiente pubbliche.
-
-### Area riservata `(dashboard)`
-
-Layout comune con **sidebar** e intestazione; le voci di menu dipendono dal **ruolo** (vedi `src/lib/navigation.ts`):
-
-| Ruolo | Voci tipiche |
-|-------|----------------|
-| **SUPER_ADMIN** | Dashboard, Aziende, Report |
-| **ADMIN** | Dashboard, Team, Filiali, Calendario, Report |
-| **MANAGER** | Dashboard, Team, Sede, Calendario, Report |
-| **BARBER** | Dashboard, Calendario |
-
-**Pagine principali**
-
-- **`/dashboard`** — riepilogo: per molti ruoli include **clienti**, **ultimi pagamenti** e azioni rapide (nuovo cliente, nuovo pagamento); per `SUPER_ADMIN` vista “control room”; dove previsto anche **KPI** economici/operativi.
-- **`/team`** — gestione staff (chi può farlo dipende da RLS e ruolo).
-- **`/locations`** — filiali: per ADMIN tutte le sedi; per MANAGER contesto “sede” (incluso link pubblico `/book/...` dalla scheda azienda dove previsto).
-- **`/calendar`** — calendario appuntamenti e, per chi gestisce la sede, **slot pubblici** (apertura/chiusura finestre prenotabili dal sito).
-- **`/reports`**, **`/reports/monthly`**, **`/reports/annual`** — reportistica (visibilità legata al ruolo).
-- **`/clients`** — elenco clienti azienda/sede.
-- **`/payments`** — movimenti di cassa / categorie / metodo; il pagamento è legato al **cliente** (la sede deriva dall’anagrafica cliente).
-- **`/companies`**, **`/companies/[companyId]`** — solo per **SUPER_ADMIN**: tenant e dettaglio (es. link prenotazione pubblica).
-
-### Prenotazione pubblica (`/book`)
-
-- **`/book/[companyId]`** — pagina per il cliente finale: sceglie sede (se più di una), data, orario disponibile (da RPC), barber opzionale, conferma prenotazione. Non richiede account; può usare **Supabase anon** + RPC `security definer`.
-- **`/book/[companyId]/area-personale`** — area “i miei appuntamenti” in base a nome + recapito (telefono/email), con dati letti tramite API/RPC dedicate.
-
-### Route API (Next)
-
-- **`/api/public/availability`** — disponibilità per il flusso book.
-- **`/api/public/my-bookings`** — storico prenotazioni lato pubblico.
-
-Tutta la logica autorizzativa sensibile resta su **Postgres (RLS + RPC)**; le chiavi pubbliche nel browser non bypassano le policy.
+> **SaaS multi-tenant per barber shop** — gestione completa di aziende, sedi, staff, clienti, appuntamenti, pagamenti e prenotazioni pubbliche.
 
 ---
 
-## Ruoli e permessi (sintesi prodotto)
+## Panoramica
 
-| Area | Cosa fa |
-|------|---------|
-| **Autenticazione** | Login Supabase; profilo in `public.profiles` con ruolo e (se applicabile) `company_id` / `location_id`. |
-| **SUPER_ADMIN** | Panoramica tenant; gestione aziende lato “control room”. |
-| **ADMIN** | Tutta l’azienda: sedi, staff, clienti, calendario, pagamenti, KPI. |
-| **MANAGER** | Solo la propria **sede**: slot aperti al pubblico, calendario sede, clienti/pagamenti della sede. |
-| **BARBER** | Calendario sui propri appuntamenti; lettura clienti collegati ai propri slot. |
-| **Prenotazione pubblica** | RPC `rpc_public_*`: disponibilità, info azienda, creazione appuntamento da pagina `/book` (anon o autenticato). |
-| **Profili automatici** | Trigger su `auth.users`: primo utente piattaforma → `SUPER_ADMIN`; successivi → nuova azienda + `ADMIN`; inviti con metadata `role` / `company_id` / `location_id`. |
+BarberHub Pro è un gestionale SaaS pensato per catene di barber shop. Ogni **azienda** (tenant) può avere più **sedi**, ognuna con il proprio **staff** (ruoli gerarchici), **clienti**, **appuntamenti** e **pagamenti**. I clienti possono prenotare online senza registrazione tramite un link pubblico.
 
-Funzioni SQL esposte alla app (estratto; dettaglio in `supabase/db.sql`):
+### Architettura
 
-- `public.my_company_id()`, `public.my_role()`, `public.my_location_id()`, `public.is_super_admin()` — helper per le policy RLS.
-- `public.rpc_public_company_info`, `public.rpc_public_availability`, `public.rpc_public_book_appointment` — flusso prenotazione pubblica.
-- `public.rpc_public_client_bookings` — recupero storico prenotazioni per telefono (dove previsto dallo schema).
-- `public.handle_new_auth_user()` — trigger `on_auth_user_created` su `auth.users`.
+```
+┌─────────────────────────────────────────────────┐
+│                  Next.js 16 App Router          │
+│  ┌─────────┐ ┌──────────┐ ┌──────────────────┐ │
+│  │ Pubbliche│ │ Dashboard │ │ API routes       │ │
+│  │ /book/*  │ │ /dashboard│ │ /api/public/*    │ │
+│  └─────────┘ └──────────┘ └──────────────────┘ │
+│         │           │               │           │
+├─────────┴───────────┴───────────────┴───────────┤
+│               Supabase (Auth + DB)              │
+│  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
+│  │  Auth    │ │ Postgres │ │ RLS + RPC      │  │
+│  │ (SSO)    │ │ (15+)    │ │ (security)     │  │
+│  └──────────┘ └──────────┘ └────────────────┘  │
+└─────────────────────────────────────────────────┘
+```
+
+**Stack**: [Next.js 16](https://nextjs.org/) (App Router) · [Supabase](https://supabase.com/) (Auth, Postgres, RLS) · TypeScript · Tailwind CSS v4 · Zod · Vitest · Playwright
 
 ---
 
-## Requisiti
+## Funzionalità
 
-- Node.js **20+** (consigliato LTS).
-- Account **Supabase** (progetto Postgres 15+; per gli indici `NULLS NOT DISTINCT` serve PG 15+).
+### 👑 Multi-tenant
+- Aziende (tenant) isolate con dati separati via RLS
+- Ruoli gerarchici: `SUPER_ADMIN` → `ADMIN` → `MANAGER` → `BARBER`
+- Ogni ruolo vede solo i dati che gli competono
+
+### 📅 Gestione appuntamenti
+- Calendario con viste giorno / 3 giorni / settimana / mese
+- Slot pubblici configurabili (ricorrenti o singoli giorni)
+- Creazione rapida dalla griglia oraria
+- Conferma / gestione stato appuntamenti
+
+### 💰 Pagamenti e cassa
+- Registrazione pagamenti per cliente
+- Categorie e metodi (cash, SRL, privato)
+- Report mensili e annuali con grafici
+
+### 🌐 Prenotazione pubblica
+- Link diretto `/book/[companyId]`
+- Clienti prenotano senza registrazione
+- Area personale per consultare storico
+- API pubbliche protette da RPC `security definer`
+
+### 🔐 Sicurezza
+- Row Level Security su tutte le tabelle
+- Rate limiting (in-memory o Upstash Redis)
+- Security headers (CSP, HSTS, X-Frame-Options)
+- CSRF protection su form mutativi
+- Sanitizzazione input lato server
+- Trace ID per correlazione log / errori
 
 ---
 
-## Setup repository
+## Screenshot
+
+*(Aggiungi screenshot qui — es. dashboard, calendario, pagina di prenotazione)*
+
+| Dashboard | Calendario | Prenotazione |
+|-----------|-----------|--------------|
+| ![][screenshot-dash] | ![][screenshot-cal] | ![][screenshot-book] |
+
+---
+
+## Guida rapida
+
+### Prerequisiti
+
+- Node.js **20+** (LTS consigliato)
+- Progetto **Supabase** (Postgres 15+)
+
+### Setup
 
 ```bash
-git clone <url-del-tuo-repo>
-cd barberhub-pro
+git clone https://github.com/Gabriele06-local/BarberHub-Pro.git
+cd BarberHub-Pro
 npm install
 cp .env.example .env.local
 ```
 
-Compila `.env.local` con URL e chiave anon/publishable dal pannello Supabase (**Settings → API**). Opzionale: `NEXT_PUBLIC_SITE_URL` per link assoluti a `/book`.
+Compila `.env.local` con i dati del tuo progetto Supabase (Settings → API):
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://tuo-progetto.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tua-chiave-anon
+```
+
+Avvia il server di sviluppo:
 
 ```bash
 npm run dev
 ```
 
-Apri [http://localhost:3000](http://localhost:3000). Se mancano le env, la app rimanda a `/setup`.
+Apri [http://localhost:3000](http://localhost:3000).
+
+### Database
+
+1. **SQL Editor** Supabase → incolla `supabase/db.sql` → esegui
+2. **Auth → URL Configuration**: aggiungi `http://localhost:3000`
+3. **Settings → API → Reload schema cache**
+
+Lo script crea: tabelle, enum, RLS policies, funzioni RPC, trigger profili automatici.
 
 ---
 
-## Database Supabase
+## Scripts
 
-### Nuovo progetto (consigliato per allineare tutto)
-
-1. Crea un progetto su [supabase.com](https://supabase.com).
-2. **SQL Editor** → incolla il contenuto di **`supabase/db.sql`** → esegui l’intero script (termina con `commit;`).
-3. **Authentication → URL configuration**: aggiungi l’URL del sito (es. `http://localhost:3000`) se usi redirect email/magic link.
-4. **Settings → API → Reload schema** (cache client).
-
-Il file **`supabase/db.sql`** è l’unico script SQL del progetto (salvalo anche offline se il progetto Supabase va in pausa): crea estensioni/tipi, tabelle, allineamenti dati leggeri (sede di default, `location_id` dove manca), funzioni, **RLS**, RPC e il trigger sui nuovi utenti. Anche per DB già avviati si usa lo stesso file (dopo backup se in produzione).
-
----
-
-## Row Level Security (policy)
-
-Le policy nel repository possono avere **nomi diversi** da etichette create manualmente in dashboard: l’importante è la **logica**. Dopo aver eseguito `db.sql`, in Supabase vedrai policy coerenti con il file.
-
-| Tabella | Comportamento (sintesi) |
-|---------|-------------------------|
-| **companies** | `SUPER_ADMIN` tutto; altri utenti vedono la propria azienda; insert solo super admin; update/delete secondo ruolo. |
-| **locations** | Admin: tutte le sedi dell’azienda; Manager/Barber: solo la propria `location_id`. |
-| **profiles** | Visibilità per company e sede; insert profili staff da ADMIN; regole update/delete per non superare i permessi. |
-| **clients** | Due policy `FOR ALL` per **ADMIN** (tutta l’azienda) e **MANAGER/BARBER** (solo sede); più **`clients_select_barber`** per lettura clienti legati ad appuntamenti del barber. |
-| **appointments** | Admin tutta azienda; Manager sede; Barber sulle proprie righe (`barber_id`). |
-| **payments** | Admin tutta azienda; Manager solo `location_id` della propria sede (nessun accesso diretto barber: allinea al product se serve). |
-| **location_open_slots** | Select/insert/delete: Admin azienda o Manager della sede dello slot. |
-
-Se in dashboard compare ancora una policy unica tipo `clients_all_staff` / `payments_all`, è equivalente a **combinazioni** di più policy nel file attuale: rieseguire `db.sql` (solo su DB di test o dopo backup) applica i nomi e le regole del repo.
-
----
-
-## Cosa **non** committare
-
-Già coperto da `.gitignore`:
-
-- **Segreti**: `.env`, `.env.local`, file `*.local` con variabili.
-- **Dipendenze / build**: `node_modules`, `.next`, `out`, `build`.
-- **IDE/OS**: `.idea`, cache varie, `Thumbs.db`.
-
-**Committare** invece **`.env.example`** (template senza valori reali).
-
-La **service role** (`SUPABASE_SERVICE_ROLE_KEY`) va solo su ambienti server sicuri (mai nel browser).
-
----
-
-## Script npm
-
-| Comando | Uso |
-|---------|-----|
+| Comando | Descrizione |
+|---------|-------------|
 | `npm run dev` | Server di sviluppo |
 | `npm run build` | Build produzione |
 | `npm run start` | Avvio dopo build |
 | `npm run lint` | ESLint |
-
-### Verifica in locale
-
-- `npx tsc --noEmit` — controllo TypeScript (nessun errore atteso).
-- `npm run build` — build di produzione (include check TS).
-- `npm run lint` — può segnalare regole strict su alcuni `useEffect` / purezza render; **non blocca** la build di default, ma conviene ripulire nel tempo.
+| `npm run typecheck` | TypeScript check |
+| `npm run test` | Unit test (watch) |
+| `npm run test:run` | Unit test (CI) |
+| `npm run test:coverage` | Unit test + coverage |
+| `npm run test:e2e` | E2E test (Playwright) |
+| `npm run check` | lint + typecheck + test |
 
 ---
 
-## Deploy
+## Struttura del progetto
 
-- **Frontend**: Vercel (o altro host Node) con le stesse variabili `NEXT_PUBLIC_*` del progetto Supabase.
-- **Backend dati**: resta su Supabase; aggiorna URL di redirect Auth con il dominio produzione.
+```
+barberhub-pro/
+├── src/
+│   ├── app/              # Next.js App Router (route, layout, API)
+│   ├── actions/          # Server Actions
+│   ├── components/       # UI Components
+│   │   ├── ui/           # Button, Card, Badge, Table, etc.
+│   │   ├── auth/         # LoginForm
+│   │   ├── book/         # Prenotazione pubblica
+│   │   ├── calendar/     # Calendario e slot
+│   │   ├── companies/    # Gestione aziende
+│   │   ├── dashboard/    # Dashboard e KPI
+│   │   ├── layout/       # Sidebar, DashboardShell
+│   │   └── reports/      # Report mensili/annuali
+│   ├── lib/
+│   │   ├── services/     # Business logic (auth, company, client, etc.)
+│   │   ├── supabase/     # Client Supabase (server, client, admin, middleware)
+│   │   ├── booking/      # Logica slot e calendario
+│   │   ├── security/     # Rate limiting, CSRF, headers, sanitize
+│   │   ├── validation/   # Zod schemas
+│   │   └── utils/        # cn(), formatCurrency
+│   ├── middleware.ts      # Security headers, rate limit, trace ID, CSRF
+│   ├── instrumentation.ts # Sentry init
+│   └── types/            # TypeScript types
+├── e2e/                  # Playwright E2E tests
+├── supabase/
+│   └── db.sql            # Database completo (DDL + RLS + RPC + trigger)
+├── .github/workflows/    # CI/CD
+├── Dockerfile            # Multi-stage production build
+├── docker-compose.yml    # Servizio app
+└── vitest.config.ts      # Vitest configuration
+```
+
+---
+
+## CI/CD
+
+Il workflow `.github/workflows/ci.yml` esegue su push/PR:
+
+1. **Lint & Type Check** — ESLint + `tsc --noEmit`
+2. **Unit Tests** — Vitest + coverage
+3. **E2E Tests** — Playwright (Chromium)
+4. **Build** — Next.js production build
+
+Con **caching** per npm, ESLint, Vitest, Next.js, Playwright.
+
+---
+
+## Docker
+
+```bash
+# Costruisci e avvia
+docker compose up --build
+
+# Oppure build manuale
+docker build -t barberhub-pro .
+docker run -p 3000:3000 --env-file .env.local barberhub-pro
+```
+
+---
+
+## Roadmap
+
+- [ ] Appuntamenti ricorrenti automatici
+- [ ] Notifiche email/SMS (Supabase Edge Functions)
+- [ ] Dashboard multi-sede con confronto KPI
+- [ ] App mobile (React Native / Expo)
+- [ ] Integrazione pagamenti digitali (Stripe)
+- [ ] Import/export dati (CSV)
 
 ---
 
 ## Licenza
 
-Definisci la licenza nel repository (es. proprietaria o MIT) secondo le tue esigenze.
+MIT — vedi [LICENSE](LICENSE).
+
+---
+
+## Contribuire
+
+1. Fork del repository
+2. Crea un branch (`git checkout -b feature/novita`)
+3. Commit (`git commit -m 'Aggiunta nuova funzionalità'`)
+4. Push (`git push origin feature/novita`)
+5. Apri una Pull Request
+
+Prima di aprire PR, assicurati che passi:
+
+```bash
+npm run check
+npm run test:e2e
+```
+
+<!-- Placeholder per screenshot futuri -->
+[screenshot-dash]: #
+[screenshot-cal]: #
+[screenshot-book]: #
