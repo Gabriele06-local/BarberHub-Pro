@@ -74,3 +74,5 @@ next-env.d.ts
 
 # export design / mockup (non parte dell’app Next)
 /stitch_barberhub_pro_saas_dashboard/
+
+supabase/.temp/
