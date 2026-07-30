@@ -1,9 +1,7 @@
-import { randomUUID } from "node:crypto";
-
 const TRACE_HEADER = "x-trace-id";
 
 function generateTraceId(): string {
-  return randomUUID().replace(/-/g, "").slice(0, 16);
+  return crypto.randomUUID().replace(/-/g, "").slice(0, 16);
 }
 
 export function getOrCreateTraceId(headers?: Headers): { traceId: string; isNew: boolean } {

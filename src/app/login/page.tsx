@@ -39,7 +39,6 @@ export default async function LoginPage({ searchParams }: { searchParams?: Login
     if (profile.ok) {
       redirect("/dashboard");
     }
-    redirect("/no-profile");
   }
 
   return (

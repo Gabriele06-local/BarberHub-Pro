@@ -13,5 +13,5 @@ export default async function Home() {
     redirect("/login");
   }
   const profile = await authService.getProfileForUser(supabase, uid);
-  redirect(profile.ok ? "/dashboard" : "/no-profile");
+  redirect(profile.ok ? "/dashboard" : "/login");
 }

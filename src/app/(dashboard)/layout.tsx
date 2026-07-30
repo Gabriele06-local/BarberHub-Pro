@@ -13,10 +13,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const profile = await authService.getCurrentProfile(supabase);
   if (!profile.ok) {
     /* Evita loop login ↔ dashboard se Auth esiste ma manca la riga in public.profiles */
-    if (profile.error === "Non autenticato") {
-      redirect("/login");
-    }
-    redirect("/no-profile");
+    redirect("/login");
   }
 
   const items = navigationForRole(profile.data.role);
